@@ -168,7 +168,8 @@ impl generated::graph::Host for WasiNnView<'_> {
         encoding: GraphEncoding,
         target: ExecutionTarget,
     ) -> wasmtime::Result<Result<Resource<Graph>, Resource<Error>>> {
-        tracing::debug!("load {encoding:?} {target:?}");
+        println!(">>>>>> [wit.rs] Host: load() called with encoding={:?}, target={:?}", encoding, target);
+    
         if let Some(backend) = self.ctx.backends.get_mut(&encoding) {
             let slices = builders.iter().map(|s| s.as_slice()).collect::<Vec<_>>();
             match backend.load(&slices, target.into()) {
@@ -188,11 +189,14 @@ impl generated::graph::Host for WasiNnView<'_> {
             );
         }
     }
+    
 
     fn load_by_name(
         &mut self,
         name: String,
     ) -> wasmtime::Result<Result<Resource<Graph>, Resource<Error>>> {
+        println!(">>>>>> [wit.rs] Host: load_by_name() called with name={:?}", name);
+    
         use core::result::Result::*;
         tracing::debug!("load by name {name:?}");
         let registry = &self.ctx.registry;
@@ -215,6 +219,8 @@ impl generated::graph::HostGraph for WasiNnView<'_> {
         &mut self,
         graph: Resource<Graph>,
     ) -> wasmtime::Result<Result<Resource<GraphExecutionContext>, Resource<Error>>> {
+        println!(">>>>>> [wit.rs] Host: init_execution_context() called");
+    
         use core::result::Result::*;
         tracing::debug!("initialize execution context");
         let graph = self.table.get(&graph)?;
@@ -242,6 +248,8 @@ impl generated::inference::HostGraphExecutionContext for WasiNnView<'_> {
         name: String,
         tensor: Resource<Tensor>,
     ) -> wasmtime::Result<Result<(), Resource<Error>>> {
+        println!(">>>>>> [wit.rs] Host: set_input() called with name={:?}", name);
+    
         let tensor = self.table.get(&tensor)?;
         tracing::debug!("set input {name:?}: {tensor:?}");
         let tensor = tensor.clone(); // TODO: avoid copying the tensor
@@ -257,6 +265,8 @@ impl generated::inference::HostGraphExecutionContext for WasiNnView<'_> {
         &mut self,
         exec_context: Resource<GraphExecutionContext>,
     ) -> wasmtime::Result<Result<(), Resource<Error>>> {
+        println!(">>>>>> [wit.rs] Host: compute() called");
+    
         let exec_context = &mut self.table.get_mut(&exec_context)?;
         tracing::debug!("compute");
         match exec_context.compute() {
@@ -272,6 +282,8 @@ impl generated::inference::HostGraphExecutionContext for WasiNnView<'_> {
         exec_context: Resource<GraphExecutionContext>,
         name: String,
     ) -> wasmtime::Result<Result<Resource<Tensor>, Resource<Error>>> {
+        println!(">>>>>> [wit.rs] Host: get_output() called for output name={:?}", name);
+    
         let exec_context = self.table.get_mut(&exec_context)?;
         tracing::debug!("get output {name:?}");
         match exec_context.get_output(Id::Name(name)) {
