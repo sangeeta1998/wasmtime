@@ -1,0 +1,9 @@
+[package]
+name = "wasmtime-wasi-gpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+anyhow = { workspace = true }
