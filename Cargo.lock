@@ -4366,6 +4366,7 @@ dependencies = [
  "wasmtime-test-util",
  "wasmtime-wasi",
  "wasmtime-wasi-config",
+ "wasmtime-wasi-gpu",
  "wasmtime-wasi-http",
  "wasmtime-wasi-keyvalue",
  "wasmtime-wasi-nn",
@@ -4680,6 +4681,15 @@ dependencies = [
  "anyhow",
  "test-programs-artifacts",
  "tokio",
+ "wasmtime",
+ "wasmtime-wasi",
+]
+
+[[package]]
+name = "wasmtime-wasi-gpu"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "wasmtime",
  "wasmtime-wasi",
 ]
