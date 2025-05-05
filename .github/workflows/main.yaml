@@ -1,0 +1,77 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+
+      # Install OpenVINO
+      - name: Install OpenVINO
+        uses: abrown/install-openvino-action@v8
+
+      - name: Build Wasmtime + wasi-nn
+        run: |
+          rustup target add wasm32-wasi
+          rustup target add wasm32-unknown-unknown
+          git clone https://github.com/bytecodealliance/wasmtime --branch v16.0.0 --depth 1 --recursive
+          cd wasmtime
+          OPENVINO_INSTALL_DIR=/opt/intel/openvino cargo build -p wasmtime-cli --features wasi-nn --release
+          sudo ln -s $(realpath target/release/wasmtime) /usr/local/bin/wasmtime
+
+      # Runs a single command using the runners shell
+      - name: Build and run Rust example
+        run: |
+          echo Building and running the Rust Wasi-NN example
+          ./build.sh rust
+
+      # Runs a set of commands using the runners shell
+      - name: Build and run AssemblyScript example
+        run: |
+          echo Building and running the Rust Wasi-NN example
+          ./build.sh as
+
+      # Test we can publish to NPM
+      - name: Publish NPM dryrun
+        run: |
+          echo Publish NPM dryrun
+          cd assemblyscript
+          npm publish --dry-run
+
+  rust:
+    name: Build and test the Rust bindings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup target add wasm32-wasi
+      - name: Run tests on native architecture
+        working-directory: rust
+        run: cargo test
+      - name: Build on wasm32-wasi
+        working-directory: rust
+        run: cargo build --target=wasm32-wasi
+      - name: Check dry-run publish to crates.io
+        working-directory: rust
+        run: cargo publish --dry-run
+
+  image2tensor:
+    name: Build the image2tensor crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup target add wasm32-wasi
+      - name: Build for wasm32-wasi
+        working-directory: image2tensor
+        run: cargo build --target=wasm32-wasi
+      - name: Check dry-run publish to crates.io
+        working-directory: image2tensor
+        run: cargo publish --dry-run

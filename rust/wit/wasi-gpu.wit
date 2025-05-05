@@ -1,0 +1,32 @@
+package wasi:gpu@0.1.0;
+
+world compute {
+    import device;
+    import program;
+    import context;
+}
+
+interface device {
+    resource gpu-device {
+        name: func() -> string;
+    }
+
+    list-devices: func() -> list<gpu-device>;
+}
+
+interface program {
+    use device.{gpu-device};
+
+    resource gpu-program {
+        compile: func(source: string) -> bool;
+    }
+
+    create: func(device: gpu-device, source: string) -> gpu-program;
+}
+
+interface context {
+    use device.{gpu-device};
+    use program.{gpu-program};
+
+    run: func(program: gpu-program) -> bool;
+}

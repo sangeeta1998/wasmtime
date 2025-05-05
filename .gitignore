@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 *.bk
 *.pyc
 *.swo
@@ -31,3 +32,6 @@ tests/all/pulley_provenance_test.cwasm
 testcase*.wat
 testcase*.wasm
 perf.data*
+=======
+wasmtime
+>>>>>>> 629c15c7a3de2e3c918f2a7b0612c5be32a53268

@@ -1,0 +1,31 @@
+[package]
+name = "image2tensor"
+version = "0.3.1"
+authors = ["The Bytecode Alliance Developers"]
+description = "Image to tensor conversion"
+license = "Apache-2.0"
+categories = ["wasm", "computer-vision"]
+repository = "https://github.com/bytecodealliance/wasi-nn/tree/main/image2tensor"
+readme = "README.md"
+edition = "2018"
+publish = true
+
+[dependencies]
+image = { version = "0.24", default-features = false, features = [
+    "gif",
+    "jpeg",
+    "ico",
+    "png",
+    "pnm",
+    "tga",
+    "tiff",
+    "webp",
+    "bmp",
+    "hdr",
+    "dxt",
+    "dds",
+    "farbfeld",
+] }
+
+[package.metadata.docs.rs]
+targets = ["wasm32-wasi"]

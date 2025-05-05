@@ -1,0 +1,37 @@
+{
+  "name": "as-wasi-nn",
+  "version": "0.3.0",
+  "description": "High-level wasi-nn bindings for AssemblyScript",
+  "scripts": {
+    "asbuild:untouched": "asc examples/object-classification.ts --runtime stub --use abort=examples/object-classification/wasi_abort --target debug --enable simd",
+    "asbuild:optimized": "asc examples/object-classification.ts --runtime stub --use abort=examples/object-classification/wasi_abort --target release --enable simd",
+    "asbuild": "npm run asbuild:untouched && npm run asbuild:optimized",
+    "demo": "npm run asbuild && ./demo.sh",
+    "nn": "./wasmtime run build/optimized.wasm --dir build --wasi-modules=experimental-wasi-nn",
+    "postinstall": "patch-package"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/as-wasi-nn.git"
+  },
+  "keywords": [
+    "wasi",
+    "wasi-nn",
+    "as",
+    "assemblyscript",
+    "ml",
+    "machine learning"
+  ],
+  "license": "Apache 2.0",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/as-wasi-nn/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/as-wasi-nn#readme",
+  "dependencies": {
+    "as-wasi": "^0.4.4"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.18.31",
+    "patch-package": "^6.4.7"
+  }
+}
