@@ -1,3 +1,7 @@
+
+
+/// device: For managing GPU devices program: For creating and compiling GPU programs context: For executing GPU programs
+
 package wasi:gpu@0.1.0;
 
 world compute {
