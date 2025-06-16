@@ -71,18 +71,11 @@
 mod generated {
     wasmtime::component::bindgen!({
         path: "wit",
-        world: "wasi:acc/provider",
-        trappable_imports: true,
-        with: {
-            "wasi:keyvalue/store/bucket": crate::Bucket,
-        },
-        trappable_error_type: {
-            "wasi:keyvalue/store/error" => crate::Error,
-        },
+        world: "wasi:acc/imports",
     });
 }
 
-use self::generated::wasi::keyvalue;
+use self::generated::wasi::acc as accelerator;
 use anyhow::Result;
 use std::collections::HashMap;
 use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
