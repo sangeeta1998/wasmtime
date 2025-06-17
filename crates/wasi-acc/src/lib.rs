@@ -14,7 +14,7 @@
 mod generated {
     wasmtime::component::bindgen!({
         path: "wit",
-        world: "wasi:acc/imports",
+        world: "wasi:acc/wasiaccimports",
     });
 }
 

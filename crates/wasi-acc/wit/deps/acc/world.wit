@@ -44,7 +44,7 @@ interface host-allocator {
     get-matrix-dimensions: func(h: handle) -> result<matrix-dimensions, host-error>;
 }
 
-world imports {
+world wasiaccimports {
   // The `wasi:acc/imports` world provides common APIs for interacting with host-allocated buffers
   // Components targeting this world will be able to do:
   //
