@@ -1,23 +1,17 @@
 use anyhow::{Result, anyhow};
-use test_programs_artifacts::{KEYVALUE_MAIN_COMPONENT, foreach_keyvalue};
+use test_programs_artifacts::{ACC_MAIN_COMPONENT, foreach_acc};
 use wasmtime::{
     Store,
-    component::{Component, Linker, ResourceTable},
+    component::{Component, Linker},
 };
 use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView, bindings::Command};
-use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
+use wasmtime_wasi_acc::{WasiAcc, WasiAccCtx, WasiAccCtxBuilder};
 
 struct Ctx {
-    table: ResourceTable,
     wasi_ctx: WasiCtx,
-    wasi_keyvalue_ctx: WasiKeyValueCtx,
+    wasi_acc_ctx: WasiAccCtx,
 }
 
-impl IoView for Ctx {
-    fn table(&mut self) -> &mut ResourceTable {
-        &mut self.table
-    }
-}
 impl WasiView for Ctx {
     fn ctx(&mut self) -> &mut WasiCtx {
         &mut self.wasi_ctx
@@ -33,8 +27,8 @@ async fn run_wasi(path: &str, ctx: Ctx) -> Result<()> {
 
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-    wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |h: &mut Ctx| {
-        WasiKeyValue::new(&h.wasi_keyvalue_ctx, &mut h.table)
+    wasmtime_wasi_acc::add_to_linker(&mut linker, |h: &mut Ctx| {
+        WasiAcc::new(&h.wasi_acc_ctx)
     })?;
 
     let command = Command::instantiate_async(&mut store, &component, &linker).await?;
@@ -58,10 +52,9 @@ foreach_keyvalue!(assert_test_exists);
 async fn keyvalue_main() -> Result<()> {
     run_wasi(
         KEYVALUE_MAIN_COMPONENT,
-        Ctx {
-            table: ResourceTable::new(),
+        Ctx {            
             wasi_ctx: WasiCtxBuilder::new().inherit_stderr().build(),
-            wasi_keyvalue_ctx: WasiKeyValueCtxBuilder::new()
+            wasi_acc_ctx: WasiAccCtxBuilder::new()
                 .in_memory_data([("atomics_key", "5")])
                 .build(),
         },

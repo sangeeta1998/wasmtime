@@ -24,6 +24,9 @@ use wasmtime_wasi_http::{
 };
 #[cfg(feature = "wasi-keyvalue")]
 use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
+#[cfg(feature = "wasi-acc")]
+use wasmtime_wasi_acc::{WasiAcc, WasiAccCtx, WasiAccCtxBuilder};
+
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::wit::WasiNnView;
 #[cfg(feature = "wasi-threads")]
@@ -933,6 +936,37 @@ impl RunCommand {
             }
         }
 
+        if self.run.common.wasi.acc == Some(true) {
+            #[cfg(not(feature = "wasi-acc"))]
+            {
+                bail!(
+                    "Cannot enable wasi-acc when the binary is not compiled with this feature."
+                );
+            }
+            #[cfg(all(feature = "wasi-acc", feature = "component-model"))]
+            {
+                match linker {
+                    CliLinker::Core(_) => {
+                        bail!("Cannot enable wasi-acc for core wasm modules");
+                    }
+                    CliLinker::Component(linker) => {
+                        let ctx = WasiAccCtxBuilder::new().build();
+
+                        wasmtime_wasi_acc::add_to_linker(linker, |h| {
+                            // let preview2_ctx =
+                            //     h.preview2_ctx.as_mut().expect("wasip2 is not configured");
+                            // let preview2_ctx =
+                            //     Arc::get_mut(preview2_ctx).unwrap().get_mut().unwrap();
+                            WasiAcc::new(
+                                Arc::get_mut(h.wasi_acc.as_mut().unwrap()).unwrap(),
+                            )
+                        })?;
+                        store.data_mut().wasi_acc = Some(Arc::new(ctx));
+                    }
+                }
+            }
+        }
+
         if self.run.common.wasi.threads == Some(true) {
             #[cfg(not(feature = "wasi-threads"))]
             {
@@ -1146,6 +1180,8 @@ struct Host {
     wasi_keyvalue: Option<Arc<WasiKeyValueCtx>>,
     #[cfg(feature = "wasi-tls")]
     wasi_tls: Option<Arc<WasiTlsCtx>>,
+    #[cfg(feature = "wasi-acc")]
+    wasi_acc: Option<Arc<WasiAccCtx>>,
 }
 
 impl Host {

@@ -18,8 +18,6 @@ mod generated {
     });
 }
 
-use crate::generated::wasi::acc;
-
 use self::generated::wasi::acc::host_allocator::{Handle, Host, HostError, MatrixDimensions};
 
 use anyhow::Result;
@@ -30,13 +28,13 @@ use wasmtime::component::HasData;
 
 /// The host-side state for the `wasi-acc` implementation.
 #[derive(Default)]
-pub struct WasiAccCtx {
+pub struct WasiAccCtxBuilder {
     buffers: HashMap<Handle, Vec<u8>>,
     matrix_dims: HashMap<Handle, (u32, u32)>,
     next_handle: Handle,
 }
 
-impl WasiAccCtx {
+impl WasiAccCtxBuilder {
     /// Creates a new context with default parameters.
     pub fn new() -> Self {
         Self {
@@ -45,22 +43,46 @@ impl WasiAccCtx {
         }
     }
 
-    fn new_handle(&mut self) -> Handle {
+    /// Builds and returns a new `WasiAccCtx` instance from this builder.
+    pub fn build(self) -> WasiAccCtx {
+        WasiAccCtx {
+            buffers: self.buffers,
+            matrix_dims: self.matrix_dims,
+            next_handle: self.next_handle,
+        }
+    }
+}
+
+/// The runtime context for WASI accelerated computing operations.
+pub struct WasiAccCtx {
+    buffers: HashMap<Handle, Vec<u8>>,
+    matrix_dims: HashMap<Handle, (u32, u32)>,
+    next_handle: Handle,
+}
+
+impl WasiAccCtx {
+    /// Creates and returns a new unique handle.
+    pub fn new_handle(&mut self) -> Handle {
         let handle = self.next_handle;
         self.next_handle += 1;
         handle
+    }
+
+    /// Creates a new builder for constructing a `WasiAccCtx`.
+    pub fn builder() -> WasiAccCtxBuilder {
+        WasiAccCtxBuilder::new()
     }
 }
 
 /// A wrapper capturing the needed internal state for `wasi-acc`.
 pub struct WasiAcc<'a> {
     /// The user-provided context.
-    ctx: &'a mut WasiAccCtx,
+    ctx: &'a WasiAccCtx,
 }
 
 impl<'a> WasiAcc<'a> {
     /// Create a new view into the `wasi-acc` state.
-    pub fn new(ctx: &'a mut WasiAccCtx) -> Self {
+    pub fn new(ctx: &'a WasiAccCtx) -> Self {
         Self { ctx }
     }
 }
@@ -219,7 +241,7 @@ pub fn add_to_linker<T: Send + 'static>(
     l: &mut wasmtime::component::Linker<T>,
     f: fn(&mut T) -> WasiAcc<'_>,
 ) -> Result<()> {
-    acc::host_allocator::add_to_linker::<_, HasWasiAcc>(l, f)
+    self::generated::wasi::acc::host_allocator::add_to_linker::<_, HasWasiAcc>(l, f)
 }
 
 
