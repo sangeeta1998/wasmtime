@@ -2,14 +2,21 @@ use anyhow::{Result, anyhow};
 use test_programs_artifacts::{ACC_MAIN_COMPONENT, foreach_acc};
 use wasmtime::{
     Store,
-    component::{Component, Linker},
+    component::{Component, Linker, ResourceTable},
 };
-use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView, bindings::Command};
+use wasmtime_wasi::p2::{bindings::Command, IoView, WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_acc::{WasiAcc, WasiAccCtx, WasiAccCtxBuilder};
 
 struct Ctx {
+    table: ResourceTable,
     wasi_ctx: WasiCtx,
     wasi_acc_ctx: WasiAccCtx,
+}
+
+impl IoView for Ctx {
+    fn table(&mut self) -> &mut ResourceTable {
+        &mut self.table
+    }
 }
 
 impl WasiView for Ctx {
@@ -28,7 +35,7 @@ async fn run_wasi(path: &str, ctx: Ctx) -> Result<()> {
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi_acc::add_to_linker(&mut linker, |h: &mut Ctx| {
-        WasiAcc::new(&h.wasi_acc_ctx)
+        WasiAcc::new(& mut h.wasi_acc_ctx)
     })?;
 
     let command = Command::instantiate_async(&mut store, &component, &linker).await?;
@@ -46,16 +53,15 @@ macro_rules! assert_test_exists {
     };
 }
 
-foreach_keyvalue!(assert_test_exists);
+foreach_acc!(assert_test_exists);
 
 #[tokio::test(flavor = "multi_thread")]
-async fn keyvalue_main() -> Result<()> {
+async fn acc_main() -> Result<()> {
     run_wasi(
-        KEYVALUE_MAIN_COMPONENT,
+        ACC_MAIN_COMPONENT,
         Ctx {            
             wasi_ctx: WasiCtxBuilder::new().inherit_stderr().build(),
             wasi_acc_ctx: WasiAccCtxBuilder::new()
-                .in_memory_data([("atomics_key", "5")])
                 .build(),
         },
     )

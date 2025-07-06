@@ -15,6 +15,7 @@ wit_bindgen::generate!({
             include wasi:http/imports@0.2.6;
             include wasi:config/imports@0.2.0-draft;
             include wasi:keyvalue/imports@0.2.0-draft;
+            include wasi:acc/imports@0.2.0-draft;
             include wasi:tls/imports@0.2.0-draft;
         }
     ",
@@ -22,6 +23,7 @@ wit_bindgen::generate!({
         "../wasi-http/wit",
         "../wasi-config/wit",
         "../wasi-keyvalue/wit",
+        "../wasi-acc/wit",
         "../wasi-tls/wit/deps/tls",
     ],
     world: "wasmtime:test/test",

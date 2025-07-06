@@ -14,7 +14,7 @@
 mod generated {
     wasmtime::component::bindgen!({
         path: "wit",
-        world: "wasi:acc/wasiaccimports",
+        world: "wasi:acc/imports",
     });
 }
 
@@ -77,12 +77,12 @@ impl WasiAccCtx {
 /// A wrapper capturing the needed internal state for `wasi-acc`.
 pub struct WasiAcc<'a> {
     /// The user-provided context.
-    ctx: &'a WasiAccCtx,
+    ctx: &'a mut WasiAccCtx,
 }
 
 impl<'a> WasiAcc<'a> {
     /// Create a new view into the `wasi-acc` state.
-    pub fn new(ctx: &'a WasiAccCtx) -> Self {
+    pub fn new(ctx: &'a mut WasiAccCtx) -> Self {
         Self { ctx }
     }
 }
