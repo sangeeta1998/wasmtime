@@ -59,7 +59,8 @@ foreach_acc!(assert_test_exists);
 async fn acc_main() -> Result<()> {
     run_wasi(
         ACC_MAIN_COMPONENT,
-        Ctx {            
+        Ctx {         
+            table: ResourceTable::new(),   
             wasi_ctx: WasiCtxBuilder::new().inherit_stderr().build(),
             wasi_acc_ctx: WasiAccCtxBuilder::new()
                 .build(),
