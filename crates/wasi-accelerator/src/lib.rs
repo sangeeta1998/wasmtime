@@ -1,8 +1,8 @@
-//! # Wasmtime's [wasi-acc] Implementation
+//! # Wasmtime's [wasi-accelerator] Implementation
 //!
-//! This crate provides a Wasmtime host implementation of the [wasi-acc]
+//! This crate provides a Wasmtime host implementation of the [wasi-accelerator]
 //! API. With this crate, the runtime can run components that call APIs in
-//! [wasi-acc] and provide components with access to accelerated computing.
+//! [wasi-accelerator] and provide components with access to accelerated computing.
 //!
 //! Currently supported compute backends:
 //! * CPUs
@@ -14,11 +14,11 @@
 mod generated {
     wasmtime::component::bindgen!({
         path: "wit",
-        world: "wasi:acc/imports",
+        world: "wasi:accelerator/imports",
     });
 }
 
-use self::generated::wasi::acc::host_allocator::{Handle, Host, HostError, MatrixDimensions};
+use self::generated::wasi::accelerator::host_allocator::{Handle, Host, HostError, MatrixDimensions};
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -26,15 +26,15 @@ use std::collections::HashMap;
 use wasmtime::component::HasData;
 // use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
 
-/// The host-side state for the `wasi-acc` implementation.
+/// The host-side state for the `wasi-accelerator` implementation.
 #[derive(Default)]
-pub struct WasiAccCtxBuilder {
+pub struct WasiAcceleratorCtxBuilder {
     buffers: HashMap<Handle, Vec<u8>>,
     matrix_dims: HashMap<Handle, (u32, u32)>,
     next_handle: Handle,
 }
 
-impl WasiAccCtxBuilder {
+impl WasiAcceleratorCtxBuilder {
     /// Creates a new context with default parameters.
     pub fn new() -> Self {
         Self {
@@ -43,9 +43,9 @@ impl WasiAccCtxBuilder {
         }
     }
 
-    /// Builds and returns a new `WasiAccCtx` instance from this builder.
-    pub fn build(self) -> WasiAccCtx {
-        WasiAccCtx {
+    /// Builds and returns a new `WasiAcceleratorCtx` instance from this builder.
+    pub fn build(self) -> WasiAcceleratorCtx {
+        WasiAcceleratorCtx {
             buffers: self.buffers,
             matrix_dims: self.matrix_dims,
             next_handle: self.next_handle,
@@ -54,13 +54,13 @@ impl WasiAccCtxBuilder {
 }
 
 /// The runtime context for WASI accelerated computing operations.
-pub struct WasiAccCtx {
+pub struct WasiAcceleratorCtx {
     buffers: HashMap<Handle, Vec<u8>>,
     matrix_dims: HashMap<Handle, (u32, u32)>,
     next_handle: Handle,
 }
 
-impl WasiAccCtx {
+impl WasiAcceleratorCtx {
     /// Creates and returns a new unique handle.
     pub fn new_handle(&mut self) -> Handle {
         let handle = self.next_handle;
@@ -68,27 +68,27 @@ impl WasiAccCtx {
         handle
     }
 
-    /// Creates a new builder for constructing a `WasiAccCtx`.
-    pub fn builder() -> WasiAccCtxBuilder {
-        WasiAccCtxBuilder::new()
+    /// Creates a new builder for constructing a `WasiAcceleratorCtx`.
+    pub fn builder() -> WasiAcceleratorCtxBuilder {
+        WasiAcceleratorCtxBuilder::new()
     }
 }
 
-/// A wrapper capturing the needed internal state for `wasi-acc`.
-pub struct WasiAcc<'a> {
+/// A wrapper capturing the needed internal state for `wasi-accelerator`.
+pub struct WasiAccelerator<'a> {
     /// The user-provided context.
-    ctx: &'a mut WasiAccCtx,
+    ctx: &'a mut WasiAcceleratorCtx,
 }
 
-impl<'a> WasiAcc<'a> {
-    /// Create a new view into the `wasi-acc` state.
-    pub fn new(ctx: &'a mut WasiAccCtx) -> Self {
+impl<'a> WasiAccelerator<'a> {
+    /// Create a new view into the `wasi-accelerator` state.
+    pub fn new(ctx: &'a mut WasiAcceleratorCtx) -> Self {
         Self { ctx }
     }
 }
 
 // Implement the `Host` trait we just imported.
-impl Host for WasiAcc<'_> {
+impl Host for WasiAccelerator<'_> {
     fn allocate_buffer(&mut self, size: u64) -> Result<Handle, HostError> {
         println!("[Host Impl] Allocating buffer of size {}", size);
         if size == 0 {
@@ -230,18 +230,18 @@ impl Host for WasiAcc<'_> {
     }
 }
 
-struct HasWasiAcc;
+struct HasWasiAccelerator;
 
-impl HasData for HasWasiAcc {
-    type Data<'a> = WasiAcc<'a>;
+impl HasData for HasWasiAccelerator {
+    type Data<'a> = WasiAccelerator<'a>;
 }
 
-/// Add all the `wasi-acc` world's interfaces to a [`wasmtime::component::Linker`].
+/// Add all the `wasi-accelerator` world's interfaces to a [`wasmtime::component::Linker`].
 pub fn add_to_linker<T: Send + 'static>(
     l: &mut wasmtime::component::Linker<T>,
-    f: fn(&mut T) -> WasiAcc<'_>,
+    f: fn(&mut T) -> WasiAccelerator<'_>,
 ) -> Result<()> {
-    self::generated::wasi::acc::host_allocator::add_to_linker::<_, HasWasiAcc>(l, f)
+    self::generated::wasi::accelerator::host_allocator::add_to_linker::<_, HasWasiAccelerator>(l, f)
 }
 
 

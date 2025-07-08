@@ -1,4 +1,4 @@
-use test_programs::wasi::acc::host_allocator::{
+use test_programs::wasi::accelerator::host_allocator::{
     MatrixDimensions, 
     allocate_buffer,
     free_buffer, 

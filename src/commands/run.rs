@@ -24,8 +24,8 @@ use wasmtime_wasi_http::{
 };
 #[cfg(feature = "wasi-keyvalue")]
 use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
-#[cfg(feature = "wasi-acc")]
-use wasmtime_wasi_acc::{WasiAcc, WasiAccCtx, WasiAccCtxBuilder};
+#[cfg(feature = "wasi-accelerator")]
+use wasmtime_wasi_accelerator::{WasiAccelerator, WasiAcceleratorCtx, WasiAcceleratorCtxBuilder};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::wit::WasiNnView;
@@ -937,31 +937,31 @@ impl RunCommand {
         }
 
         if self.run.common.wasi.acc == Some(true) {
-            #[cfg(not(feature = "wasi-acc"))]
+            #[cfg(not(feature = "wasi-accelerator"))]
             {
                 bail!(
-                    "Cannot enable wasi-acc when the binary is not compiled with this feature."
+                    "Cannot enable wasi-accelerator when the binary is not compiled with this feature."
                 );
             }
-            #[cfg(all(feature = "wasi-acc", feature = "component-model"))]
+            #[cfg(all(feature = "wasi-accelerator", feature = "component-model"))]
             {
                 match linker {
                     CliLinker::Core(_) => {
-                        bail!("Cannot enable wasi-acc for core wasm modules");
+                        bail!("Cannot enable wasi-accelerator for core wasm modules");
                     }
                     CliLinker::Component(linker) => {
-                        let ctx = WasiAccCtxBuilder::new().build();
+                        let ctx = WasiAcceleratorCtxBuilder::new().build();
 
-                        wasmtime_wasi_acc::add_to_linker(linker, |h| {
+                        wasmtime_wasi_accelerator::add_to_linker(linker, |h| {
                             // let preview2_ctx =
                             //     h.preview2_ctx.as_mut().expect("wasip2 is not configured");
                             // let preview2_ctx =
                             //     Arc::get_mut(preview2_ctx).unwrap().get_mut().unwrap();
-                            WasiAcc::new(
-                                Arc::get_mut(h.wasi_acc.as_mut().unwrap()).unwrap(),
+                            WasiAccelerator::new(
+                                Arc::get_mut(h.wasi_accelerator.as_mut().unwrap()).unwrap(),
                             )
                         })?;
-                        store.data_mut().wasi_acc = Some(Arc::new(ctx));
+                        store.data_mut().wasi_accelerator = Some(Arc::new(ctx));
                     }
                 }
             }
@@ -1180,8 +1180,8 @@ struct Host {
     wasi_keyvalue: Option<Arc<WasiKeyValueCtx>>,
     #[cfg(feature = "wasi-tls")]
     wasi_tls: Option<Arc<WasiTlsCtx>>,
-    #[cfg(feature = "wasi-acc")]
-    wasi_acc: Option<Arc<WasiAccCtx>>,
+    #[cfg(feature = "wasi-accelerator")]
+    wasi_accelerator: Option<Arc<WasiAcceleratorCtx>>,
 }
 
 impl Host {
