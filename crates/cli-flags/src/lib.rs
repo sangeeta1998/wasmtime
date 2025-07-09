@@ -438,7 +438,7 @@ wasmtime_option_group! {
         /// Enable support for WASI key-value imports (experimental)
         pub keyvalue: Option<bool>,
         /// Enable support for WASI accelerator imports (experimental)
-        pub acc: Option<bool>,
+        pub accelerator: Option<bool>,
         /// Inherit environment variables and file descriptors following the
         /// systemd listen fd specification (UNIX only) (legacy wasip1
         /// implementation only)

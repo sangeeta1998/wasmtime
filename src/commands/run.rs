@@ -936,7 +936,7 @@ impl RunCommand {
             }
         }
 
-        if self.run.common.wasi.acc == Some(true) {
+        if self.run.common.wasi.accelerator == Some(true) {
             #[cfg(not(feature = "wasi-accelerator"))]
             {
                 bail!(

@@ -29,6 +29,8 @@ use wasmtime_wasi_http::{
     WasiHttpView, body::HyperOutgoingBody,
 };
 
+#[cfg(feature = "wasi-accelerator")]
+use wasmtime_wasi_accelerator::{WasiAccelerator, WasiAcceleratorCtx, WasiAcceleratorCtxBuilder};
 #[cfg(feature = "wasi-config")]
 use wasmtime_wasi_config::{WasiConfig, WasiConfigVariables};
 #[cfg(feature = "wasi-keyvalue")]
@@ -53,6 +55,9 @@ struct Host {
 
     #[cfg(feature = "wasi-keyvalue")]
     wasi_keyvalue: Option<WasiKeyValueCtx>,
+
+    #[cfg(feature = "wasi-accelerator")]
+    wasi_accelerator: Option<WasiAcceleratorCtx>,
 
     #[cfg(feature = "profiling")]
     guest_profiler: Option<Arc<wasmtime::GuestProfiler>>,
@@ -189,6 +194,8 @@ impl ServeCommand {
             wasi_config: None,
             #[cfg(feature = "wasi-keyvalue")]
             wasi_keyvalue: None,
+            #[cfg(feature = "wasi-accelerator")]
+            wasi_accelerator: None,
             #[cfg(feature = "profiling")]
             guest_profiler: None,
         };
@@ -238,6 +245,13 @@ impl ServeCommand {
                     )
                     .build();
                 host.wasi_keyvalue.replace(ctx);
+            }
+        }
+        if self.run.common.wasi.accelerator == Some(true) {
+            #[cfg(feature = "wasi-accelerator")]
+            {
+                let ctx = WasiAcceleratorCtxBuilder::new().build();
+                host.wasi_accelerator.replace(ctx);
             }
         }
 
@@ -310,6 +324,19 @@ impl ServeCommand {
             {
                 wasmtime_wasi_keyvalue::add_to_linker(linker, |h: &mut Host| {
                     WasiKeyValue::new(h.wasi_keyvalue.as_ref().unwrap(), &mut h.table)
+                })?;
+            }
+        }
+
+        if self.run.common.wasi.accelerator == Some(true) {
+            #[cfg(not(feature = "wasi-accelerator"))]
+            {
+                bail!("support for wasi-accelerator was disabled at compile time");
+            }
+            #[cfg(feature = "wasi-accelerator")]
+            {
+                wasmtime_wasi_accelerator::add_to_linker(linker, |h: &mut Host| {
+                    WasiAccelerator::new(h.wasi_accelerator.as_mut().unwrap())
                 })?;
             }
         }

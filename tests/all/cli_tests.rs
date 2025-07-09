@@ -2076,6 +2076,16 @@ start a print 1234
     }
 
     #[test]
+    fn cli_accelerator() -> Result<()> {
+        run_wasmtime(&[
+            "run",
+            "-Saccelerator",
+            ACCELERATOR_MAIN_COMPONENT,
+        ])?;
+        Ok(())
+    }
+
+    #[test]
     fn cli_multiple_preopens() -> Result<()> {
         run_wasmtime(&[
             "run",
