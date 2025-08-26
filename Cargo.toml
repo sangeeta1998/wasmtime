@@ -238,24 +238,11 @@ wasmtime-wasi-http = { path = "crates/wasi-http", version = "37.0.0", default-fe
 wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "37.0.0" }
 wasmtime-wasi-config = { path = "crates/wasi-config", version = "37.0.0" }
 wasmtime-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "37.0.0" }
+wasmtime-wasi-accelerator = { path = "crates/wasi-accelerator", version = "37.0.0" }
 wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "37.0.0" }
 wasmtime-wasi-tls = { path = "crates/wasi-tls", version = "37.0.0" }
 wasmtime-wasi-tls-nativetls = { path = "crates/wasi-tls-nativetls", version = "37.0.0" }
 wasmtime-wast = { path = "crates/wast", version = "=37.0.0" }
-wasmtime = { path = "crates/wasmtime", version = "36.0.0", default-features = false }
-wasmtime-cli-flags = { path = "crates/cli-flags", version = "=36.0.0" }
-wasmtime-environ = { path = "crates/environ", version = "=36.0.0" }
-wasmtime-wasi = { path = "crates/wasi", version = "36.0.0", default-features = false }
-wasmtime-wasi-io = { path = "crates/wasi-io", version = "36.0.0", default-features = false }
-wasmtime-wasi-http = { path = "crates/wasi-http", version = "36.0.0", default-features = false }
-wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "36.0.0" }
-wasmtime-wasi-config = { path = "crates/wasi-config", version = "36.0.0" }
-wasmtime-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "36.0.0" }
-wasmtime-wasi-accelerator = { path = "crates/wasi-accelerator", version = "36.0.0" }
-wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "36.0.0" }
-wasmtime-wasi-tls = { path = "crates/wasi-tls", version = "36.0.0" }
-wasmtime-wasi-tls-nativetls = { path = "crates/wasi-tls-nativetls", version = "36.0.0" }
-wasmtime-wast = { path = "crates/wast", version = "=36.0.0" }
 
 # Internal Wasmtime-specific crates.
 #
