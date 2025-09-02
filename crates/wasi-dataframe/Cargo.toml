@@ -1,0 +1,24 @@
+[package]
+name = "wasmtime-wasi-dataframe"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository = "https://github.com/bytecodealliance/wasmtime"
+license = "Apache-2.0 WITH LLVM-exception"
+description = "Wasmtime implementation of the wasi-accelerator API"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+wasmtime = { workspace = true, features = ["runtime", "component-model", "std"] }
+nalgebra = "0.33.2"         # For matrix math (provider does the multiplication)
+polars = "0.49.1"
+
+
+[dev-dependencies]
+test-programs-artifacts = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
