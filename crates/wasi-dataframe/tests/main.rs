@@ -1,70 +1,43 @@
-use anyhow::{Result, anyhow};
-use test_programs_artifacts::{ACCELERATOR_MAIN_COMPONENT, foreach_accelerator};
-use wasmtime::{
-    Store,
-    component::{Component, Linker, ResourceTable},
-};
-use wasmtime_wasi::p2::{bindings::Command, IoView, WasiCtx, WasiCtxBuilder, WasiView};
-use wasmtime_wasi_accelerator::{WasiAccelerator, WasiAcceleratorCtx, WasiAcceleratorCtxBuilder};
+use anyhow::Result;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
 
-struct Ctx {
-    table: ResourceTable,
-    wasi_ctx: WasiCtx,
-    wasi_accelerator_ctx: WasiAcceleratorCtx,
-}
+use wasmtime_wasi_dataframe::{WasiDataframe, WasiDataframeCtx, WasiDataframeCtxBuilder};
 
-impl IoView for Ctx {
-    fn table(&mut self) -> &mut ResourceTable {
-        &mut self.table
-    }
-}
+// Bring the generated trait into scope so we can call the host methods.
+use wasmtime_wasi_dataframe::bindings::wasi::accelerator::dataframe_analysis::Host as _;
 
-impl WasiView for Ctx {
-    fn ctx(&mut self) -> &mut WasiCtx {
-        &mut self.wasi_ctx
-    }
-}
+#[test]
+fn dataframe_smoke() -> Result<()> {
+	// Create a small CSV in a temp dir
+	let mut dir = std::env::temp_dir();
+	dir.push("wasi_df_test");
+	std::fs::create_dir_all(&dir)?;
+	let mut csv_path = PathBuf::from(&dir);
+	csv_path.push("data.csv");
+	let mut f = File::create(&csv_path)?;
+	writeln!(f, "city,group,val")?;
+	writeln!(f, "A,x,10")?;
+	writeln!(f, "A,y,5")?;
+	writeln!(f, "B,x,7")?;
+	writeln!(f, "B,y,3")?;
+	f.flush()?;
 
-async fn run_wasi(path: &str, ctx: Ctx) -> Result<()> {
-    let engine = test_programs_artifacts::engine(|config| {
-        config.async_support(true);
-    });
-    let mut store = Store::new(&engine, ctx);
-    let component = Component::from_file(&engine, path)?;
+	// Build context and call host API directly
+	let mut ctx: WasiDataframeCtx = WasiDataframeCtxBuilder::new().build();
+	let mut host = WasiDataframe::new(&mut ctx);
 
-    let mut linker = Linker::new(&engine);
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-    wasmtime_wasi_accelerator::add_to_linker(&mut linker, |h: &mut Ctx| {
-        WasiAccelerator::new(& mut h.wasi_accelerator_ctx)
-    })?;
+	let df = host.load_csv(csv_path.to_string_lossy().to_string())?;
+	let df_filtered = host.filter(df, "val > 5".to_string())?;
+	let df_grouped = host.group_by(df_filtered, vec!["group".to_string()])?;
+	let df_agg = host.aggregate(df_grouped, vec!["mean(val)".to_string(), "count()".to_string()])?;
+	let json = host.to_json(df_agg)?;
 
-    let command = Command::instantiate_async(&mut store, &component, &linker).await?;
-    command
-        .wasi_cli_run()
-        .call_run(&mut store)
-        .await?
-        .map_err(|()| anyhow!("command returned with failing exit status"))
-}
+	// Basic assertions
+	assert!(json.starts_with("["));
+	assert!(json.contains("mean_val"));
+	assert!(json.contains("count"));
 
-macro_rules! assert_test_exists {
-    ($name:ident) => {
-        #[expect(unused_imports, reason = "just here to assert it exists")]
-        use self::$name as _;
-    };
-}
-
-foreach_accelerator!(assert_test_exists);
-
-#[tokio::test(flavor = "multi_thread")]
-async fn accelerator_main() -> Result<()> {
-    run_wasi(
-        ACCELERATOR_MAIN_COMPONENT,
-        Ctx {         
-            table: ResourceTable::new(),   
-            wasi_ctx: WasiCtxBuilder::new().inherit_stderr().build(),
-            wasi_accelerator_ctx: WasiAcceleratorCtxBuilder::new()
-                .build(),
-        },
-    )
-    .await
+	Ok(())
 }

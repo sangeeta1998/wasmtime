@@ -1,241 +1,264 @@
-//! # Wasmtime's [wasi-accelerator] Implementation
+//! # Wasmtime's [wasi-dataframe] Implementation
 //!
-//! This crate provides a Wasmtime host implementation of the [wasi-accelerator]
-//! API. With this crate, the runtime can run components that call APIs in
-//! [wasi-accelerator] and provide components with access to accelerated computing.
+//! This crate provides a Wasmtime host implementation of a proposed
+//! `dataframe-analysis` interface under the `wasi:accelerator` package.
+//! It exposes a subset of Polars operations to guest components.
 //!
-//! Currently supported compute backends:
-//! * CPUs
-//! * Cuda enabled GPUs (to come)
-//!
+//! Currently supported operations:
+//! - load-csv(path)
+//! - filter(df, predicate_string) [very small subset parser]
+//! - group-by(df, by_columns)
+//! - aggregate(df, aggs) [supports mean(col) and count()]
+//! - to-json(df) [serializes a small preview for now]
+//
 
 #![deny(missing_docs)]
 
 mod generated {
-    wasmtime::component::bindgen!({
-        path: "wit",
-        world: "wasi:accelerator/imports",
-    });
+	wasmtime::component::bindgen!({
+		path: "wit",
+		world: "wasi:accelerator/imports",
+	});
 }
 
-use self::generated::wasi::accelerator::host_allocator::{Handle, Host, HostError, MatrixDimensions};
+// Re-export a public path to the generated bindings for external tests/examples.
+pub use self::generated as bindings;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-
 use wasmtime::component::HasData;
-// use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
 
-/// The host-side state for the `wasi-accelerator` implementation.
+use polars::prelude::*;
+
+// Bring generated interface into scope.
+use self::generated::wasi::accelerator::dataframe_analysis as wit_df;
+
+/// Opaque handle to a host-side dataframe (we use `LazyFrame` for cheap cloning and planning).
+pub type DataframeHandle = u32;
+
+/// Builder for the runtime context which owns host-side dataframes.
 #[derive(Default)]
-pub struct WasiAcceleratorCtx {
-    // We store LazyFrames because they are cheap to clone and build query plans on.
-    lazyframes: HashMap<Dataframe, LazyFrame>,
-    next_handle: u32,
+pub struct WasiDataframeCtxBuilder {
+	_lazyframes: HashMap<DataframeHandle, LazyFrame>,
+	_next_handle: DataframeHandle,
 }
 
-impl WasiAcceleratorCtx {
-    pub fn new_handle(&mut self) -> u32 { /* ... same as before ... */ }
-    pub fn builder() -> WasiAcceleratorCtxBuilder { /* ... same as before ... */ }
+impl WasiDataframeCtxBuilder {
+	/// Creates a new builder with default parameters.
+	pub fn new() -> Self {
+		Self {
+			_next_handle: 1,
+			..Default::default()
+		}
+	}
+
+	/// Builds the runtime context.
+	pub fn build(self) -> WasiDataframeCtx {
+		WasiDataframeCtx {
+			lazyframes: self._lazyframes,
+			next_handle: self._next_handle,
+		}
+	}
 }
 
-/// Builder for the context.
-#[derive(Default)]
-pub struct WasiAcceleratorCtxBuilder {
-    // We can initialize it with data later if needed.
+/// The runtime context for WASI dataframe operations.
+pub struct WasiDataframeCtx {
+	lazyframes: HashMap<DataframeHandle, LazyFrame>,
+	next_handle: DataframeHandle,
 }
 
-impl WasiAcceleratorCtxBuilder {
-    pub fn new() -> Self { /* ... */ }
-    pub fn build(self) -> WasiAcceleratorCtx { WasiAcceleratorCtx::default() }
+impl WasiDataframeCtx {
+	/// Creates and returns a new unique handle.
+	pub fn new_handle(&mut self) -> DataframeHandle {
+		let handle = self.next_handle;
+		self.next_handle = self.next_handle.wrapping_add(1).max(1);
+		handle
+	}
+
+	/// Creates a new builder for constructing a `WasiDataframeCtx`.
+	pub fn builder() -> WasiDataframeCtxBuilder {
+		WasiDataframeCtxBuilder::new()
+	}
 }
 
-/// The wrapper struct remains the same.
-pub struct WasiAccelerator<'a> {
-    ctx: &'a mut WasiAcceleratorCtx,
-}
-impl<'a> WasiAccelerator<'a> {
-    pub fn new(ctx: &'a mut WasiAcceleratorCtx) -> Self { Self { ctx } }
+/// A wrapper capturing the needed internal state for `wasi-dataframe`.
+pub struct WasiDataframe<'a> {
+	/// The user-provided context.
+	ctx: &'a mut WasiDataframeCtx,
 }
 
-// Implement the `Host` trait we just imported.
-impl Host for WasiAccelerator<'_> {
-    fn allocate_buffer(&mut self, size: u64) -> Result<Handle, HostError> {
-        println!("[Host Impl] Allocating buffer of size {}", size);
-        if size == 0 {
-            return Err(HostError::Other("Cannot allocate zero-size buffer".to_string()));
-        }
-        let handle = self.ctx.new_handle();
-        self.ctx.buffers.insert(handle, vec![0u8; size as usize]);
-        Ok(handle)
-    }
-
-    fn free_buffer(&mut self, h: Handle) -> Result<(), HostError> {
-        println!("[Host Impl] Freeing buffer {}", h);
-        if self.ctx.buffers.remove(&h).is_some() {
-            self.ctx.matrix_dims.remove(&h);
-            Ok(())
-        } else {
-            Err(HostError::InvalidHandle)
-        }
-    }
-
-    fn write_to_host(
-        &mut self,
-        guest_bytes: Vec<u8>,
-        target_handle: Handle,
-        target_offset: u64,
-    ) -> Result<(), HostError> {
-        println!(
-            "[Host Impl] Writing {} bytes to handle {} at offset {}",
-            guest_bytes.len(),
-            target_handle,
-            target_offset
-        );
-        match self.ctx.buffers.get_mut(&target_handle) {
-            Some(buffer) => {
-                let offset = target_offset as usize;
-                let end = offset + guest_bytes.len();
-                if end > buffer.len() {
-                    return Err(HostError::CopyOutOfBounds);
-                }
-                buffer[offset..end].copy_from_slice(&guest_bytes);
-                Ok(())
-            }
-            None => Err(HostError::InvalidHandle),
-        }
-    }
-
-    fn read_from_host(
-        &mut self,
-        source_handle: u32,
-        source_offset: u64,
-        len: u64,
-    ) -> Result<Vec<u8>, HostError> {
-        println!(
-            "[Host Impl] Reading {} bytes from handle {} at offset {}",
-            len, source_handle, source_offset
-        );
-        match self.ctx.buffers.get(&source_handle) {
-            Some(buffer) => {
-                let offset = source_offset as usize;
-                let read_len = len as usize;
-                if offset + read_len > buffer.len() {
-                    return Err(HostError::CopyOutOfBounds);
-                }
-                Ok(buffer[offset..offset + read_len].to_vec())
-            }
-            None => Err(HostError::InvalidHandle),
-        }
-    }
-
-    fn register_matrix_dimensions(
-        &mut self,
-        h: u32,
-        dims: MatrixDimensions,
-    ) -> Result<(), HostError> {
-        println!(
-            "[Host Impl] Registering dimensions {}x{} for handle {}",
-            dims.rows, dims.cols, h
-        );
-        if !self.ctx.buffers.contains_key(&h) {
-            return Err(HostError::InvalidHandle);
-        }
-        self.ctx.matrix_dims.insert(h, (dims.rows, dims.cols));
-        Ok(())
-    }
-
-    fn get_matrix_dimensions(&mut self, h: u32) -> Result<MatrixDimensions, HostError> {
-        println!("[Host Impl] Getting dimensions for handle {}", h);
-        match self.ctx.matrix_dims.get(&h) {
-            Some(&(rows, cols)) => Ok(MatrixDimensions { rows, cols }),
-            None => Err(HostError::InvalidHandle),
-        }
-    }
-
-
-    fn matrix_multiply_f32(
-        &mut self,
-        handle_a: u32,
-        handle_b: u32,
-    ) -> Result<u32, HostError> {
-        println!("[Host Impl] Matrix multiply f32 for A:{} and B:{}", handle_a, handle_b);
-
-        let result = (|| {
-            let (rows_a, cols_a) = *self.ctx.matrix_dims.get(&handle_a).ok_or(HostError::InvalidHandle)?;
-            let buffer_a_bytes = self.ctx.buffers.get(&handle_a).ok_or(HostError::InvalidHandle)?;
-            let matrix_a_data = bytes_to_f32_slice(buffer_a_bytes)
-                .ok_or_else(|| HostError::Other("Failed to cast buffer A to f32".to_string()))?;
-            if matrix_a_data.len() != (rows_a * cols_a) as usize { return Err(HostError::Other("Buffer A size mismatch with dims".to_string())); }
-            let matrix_a = nalgebra::DMatrix::<f32>::from_row_slice(rows_a as usize, cols_a as usize, matrix_a_data);
-    
-            let (rows_b, cols_b) = *self.ctx.matrix_dims.get(&handle_b).ok_or(HostError::InvalidHandle)?;
-            let buffer_b_bytes = self.ctx.buffers.get(&handle_b).ok_or(HostError::InvalidHandle)?;
-            let matrix_b_data = bytes_to_f32_slice(buffer_b_bytes)
-                .ok_or_else(|| HostError::Other("Failed to cast buffer B to f32".to_string()))?;
-            if matrix_b_data.len() != (rows_b * cols_b) as usize { return Err(HostError::Other("Buffer B size mismatch with dims".to_string())); }
-            let matrix_b = nalgebra::DMatrix::<f32>::from_row_slice(rows_b as usize, cols_b as usize, matrix_b_data);
-    
-            if cols_a != rows_b {
-                return Err(HostError::DimensionMismatch);
-            }
-    
-            let matrix_c = matrix_a * matrix_b;
-            let handle_c = self.ctx.new_handle();
-            
-            let mut row_major_data = Vec::with_capacity(matrix_c.len());
-            for r in 0..matrix_c.nrows() {
-                for c in 0..matrix_c.ncols() {
-                    row_major_data.push(matrix_c[(r, c)]);
-                }
-            }
-            let c_bytes = f32_slice_to_bytes(&row_major_data);
-
-            self.ctx.buffers.insert(handle_c, c_bytes);
-            self.ctx.matrix_dims.insert(handle_c, (matrix_c.nrows() as u32, matrix_c.ncols() as u32));
-            println!("[Host Impl] Stored result C ({},{}) with handle {}", matrix_c.nrows(), matrix_c.ncols(), handle_c);
-            Ok(handle_c)
-        })();
-
-        result
-    }
+impl<'a> WasiDataframe<'a> {
+	/// Create a new view into the `wasi-dataframe` state.
+	pub fn new(ctx: &'a mut WasiDataframeCtx) -> Self {
+		Self { ctx }
+	}
 }
 
-struct HasWasiAccelerator;
+// Implement the generated `Host` trait for the `dataframe-analysis` interface.
+impl wit_df::Host for WasiDataframe<'_> {
+	fn load_csv(&mut self, path: String) -> Result<wit_df::Dataframe> {
+		let lf = LazyCsvReader::new(path)
+			.has_header(true)
+			.finish()
+			.map_err(|e| anyhow!("load-csv failed: {e}"))?;
+		let h = self.ctx.new_handle();
+		self.ctx.lazyframes.insert(h, lf);
+		Ok(h)
+	}
 
-impl HasData for HasWasiAccelerator {
-    type Data<'a> = WasiAccelerator<'a>;
+	fn filter(&mut self, df: wit_df::Dataframe, f: String) -> Result<wit_df::Dataframe> {
+		let lf = self
+			.ctx
+			.lazyframes
+			.get(&df)
+			.cloned()
+			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
+
+		let expr = parse_simple_predicate(&f)?;
+		let out = lf.filter(expr);
+		let h = self.ctx.new_handle();
+		self.ctx.lazyframes.insert(h, out);
+		Ok(h)
+	}
+
+	fn group_by(&mut self, df: wit_df::Dataframe, by_columns: Vec<String>) -> Result<wit_df::Dataframe> {
+		let lf = self
+			.ctx
+			.lazyframes
+			.get(&df)
+			.cloned()
+			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
+		if by_columns.is_empty() {
+			return Err(anyhow!("group-by requires at least one column"));
+		}
+		let out = lf.group_by(by_columns);
+		let h = self.ctx.new_handle();
+		self.ctx.lazyframes.insert(h, out);
+		Ok(h)
+	}
+
+	fn aggregate(&mut self, df: wit_df::Dataframe, aggs: Vec<String>) -> Result<wit_df::Dataframe> {
+		let lf = self
+			.ctx
+			.lazyframes
+			.get(&df)
+			.cloned()
+			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
+
+		let mut agg_exprs: Vec<Expr> = Vec::new();
+		if aggs.is_empty() {
+			// Default to count if no aggregates provided.
+			agg_exprs.push(Expr::count().alias("count"));
+		} else {
+			for s in aggs.iter() {
+				if let Some(col) = s.strip_prefix("mean(").and_then(|t| t.strip_suffix(')')) {
+					agg_exprs.push(col(col).mean().alias(&format!("mean_{}", col)));
+				} else if s == "count()" {
+					agg_exprs.push(Expr::count().alias("count"));
+				} else {
+					return Err(anyhow!("unsupported aggregation: {s}"));
+				}
+			}
+		}
+		let out = lf.agg(agg_exprs);
+		let h = self.ctx.new_handle();
+		self.ctx.lazyframes.insert(h, out);
+		Ok(h)
+	}
+
+	fn to_json(&mut self, df: wit_df::Dataframe) -> Result<String> {
+		let lf = self
+			.ctx
+			.lazyframes
+			.get(&df)
+			.cloned()
+			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
+
+		let df = lf
+			.limit(100) // keep output small
+			.collect()
+			.map_err(|e| anyhow!("collect failed: {e}"))?;
+
+		// Serialize rows to a JSON array of objects (simple/naive implementation)
+		let columns = df.get_columns();
+		let col_names: Vec<&str> = columns.iter().map(|c| c.name().as_str()).collect();
+		let height = df.height();
+
+		let mut rows_json = String::from("[");
+		for row_idx in 0..height {
+			if row_idx > 0 { rows_json.push(','); }
+			rows_json.push('{');
+			for (ci, series) in columns.iter().enumerate() {
+				if ci > 0 { rows_json.push(','); }
+				rows_json.push('"');
+				rows_json.push_str(col_names[ci]);
+				rows_json.push_str("":");
+				let v = series.get(row_idx).map_err(|e| anyhow!("row access failed: {e}"))?;
+				rows_json.push_str(&json_value_from_anyvalue(v));
+			}
+			rows_json.push('}');
+		}
+		rows_json.push(']');
+		Ok(rows_json)
+	}
 }
 
-/// Add all the `wasi-accelerator` world's interfaces to a [`wasmtime::component::Linker`].
+fn json_value_from_anyvalue(v: AnyValue) -> String {
+	match v {
+		AnyValue::Null => "null".to_string(),
+		AnyValue::Boolean(b) => if b { "true" } else { "false" }.to_string(),
+		AnyValue::Utf8(s) => format!("\"{}\"", escape_json_str(s)),
+		AnyValue::Float64(f) => format!("{}", f),
+		AnyValue::Float32(f) => format!("{}", f),
+		AnyValue::Int64(i) => i.to_string(),
+		AnyValue::Int32(i) => i.to_string(),
+		AnyValue::Int16(i) => i.to_string(),
+		AnyValue::Int8(i) => i.to_string(),
+		AnyValue::UInt64(i) => i.to_string(),
+		AnyValue::UInt32(i) => i.to_string(),
+		AnyValue::UInt16(i) => i.to_string(),
+		AnyValue::UInt8(i) => i.to_string(),
+		_ => format!("\"{}\"", escape_json_str(&v.to_string())),
+	}
+}
+
+fn escape_json_str(s: &str) -> String {
+	s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn parse_simple_predicate(s: &str) -> Result<Expr> {
+	// Very small subset parser: "col > number" or "col == number"
+	let parts: Vec<&str> = s.split_whitespace().collect();
+	if parts.len() != 3 { return Err(anyhow!("unsupported filter predicate: {s}")); }
+	let col_name = parts[0];
+	let op = parts[1];
+	let rhs_str = parts[2];
+	let rhs_num = rhs_str.parse::<f64>().map_err(|_| anyhow!("rhs must be number: {rhs_str}"))?;
+	let rhs = lit(rhs_num);
+	let c = col(col_name);
+	let expr = match op {
+		">" => c.gt(rhs),
+		">=" => c.gt_eq(rhs),
+		"<" => c.lt(rhs),
+		"<=" => c.lt_eq(rhs),
+		"==" => c.eq(rhs),
+		"!=" => c.neq(rhs),
+		_ => return Err(anyhow!("unsupported operator in predicate: {op}")),
+	};
+	Ok(expr)
+}
+
+struct HasWasiDataframe;
+
+impl HasData for HasWasiDataframe {
+	type Data<'a> = WasiDataframe<'a>;
+}
+
+/// Add all the `wasi-dataframe` world's interfaces to a `wasmtime::component::Linker`.
 pub fn add_to_linker<T: Send + 'static>(
-    l: &mut wasmtime::component::Linker<T>,
-    f: fn(&mut T) -> WasiAccelerator<'_>,
+	l: &mut wasmtime::component::Linker<T>,
+	f: fn(&mut T) -> WasiDataframe<'_>,
 ) -> Result<()> {
-    self::generated::wasi::accelerator::host_allocator::add_to_linker::<_, HasWasiAccelerator>(l, f)
-}
-
-
-fn bytes_to_f32_slice(bytes: &[u8]) -> Option<&[f32]> {
-    if bytes.as_ptr() as usize % std::mem::align_of::<f32>() != 0 {
-        return None;
-    }
-    if bytes.len() % std::mem::size_of::<f32>() != 0 {
-        return None;
-    }
-    unsafe {
-        Some(std::slice::from_raw_parts(
-            bytes.as_ptr() as *const f32,
-            bytes.len() / std::mem::size_of::<f32>(),
-        ))
-    }
-}
-
-fn f32_slice_to_bytes(floats: &[f32]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(floats.len() * std::mem::size_of::<f32>());
-    for float_val in floats {
-        bytes.extend_from_slice(&float_val.to_ne_bytes());
-    }
-    bytes
+	self::generated::wasi::accelerator::dataframe_analysis::add_to_linker::<_, HasWasiDataframe>(l, f)
 }
 
