@@ -15,10 +15,10 @@
 
 #![deny(missing_docs)]
 
-mod generated {
+pub mod generated {
 	wasmtime::component::bindgen!({
 		path: "wit",
-		world: "wasi:accelerator/imports",
+		world: "imports",
 	});
 }
 
@@ -205,7 +205,7 @@ impl wit_df::Host for WasiDataframe<'_> {
 				if ci > 0 { rows_json.push(','); }
 				rows_json.push('"');
 				rows_json.push_str(col_names[ci]);
-				rows_json.push_str("":");
+				rows_json.push_str("\":");
 				let v = series.get(row_idx).map_err(|e| anyhow!("row access failed: {e}"))?;
 				rows_json.push_str(&json_value_from_anyvalue(v));
 			}
