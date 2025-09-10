@@ -1,23 +1,40 @@
-package wasi:accelerator@0.2.0-draft; // Keep the package name for now for simplicity
+package wasi:accelerator@0.2.0-draft; // Keep the package name for now
 
-// The interface is no longer `host-allocator`, it's `dataframe-analysis`
 interface dataframe-analysis {
-    // Opaque handle to a dataframe/lazyframe on the host
-    type dataframe = u32;
+	// Opaque handle to a dataframe/lazyframe on the host
+	type dataframe = u32;
 
-    // Simplified filter and aggregation using strings for the first prototype
-    type filter = string;       // e.g., "column > 10"
-    type aggregation = string;  // e.g., "mean(column)"
+	// Comparators for filters
+	enum comparator { gt, gte, lt, lte, eq, neq }
 
-    // --- The API ---
-    load-csv: func(path: string) -> result<dataframe>;
-    filter: func(df: dataframe, f: filter) -> result<dataframe>;
-    group-by: func(df: dataframe, by-columns: list<string>) -> result<dataframe>;
-    aggregate: func(df: dataframe, aggs: list<aggregation>) -> result<dataframe>;
-    to-json: func(df: dataframe) -> result<string>;
+	// Simple scalar values used in filters
+	union scalar {
+		f64,
+		string,
+		bool,
+	}
+
+	record column-filter {
+		column: string,
+		op: comparator,
+		value: scalar,
+	}
+
+	// Aggregation functions
+	enum aggregation {
+		count,
+		mean(string),
+	}
+
+	// --- The API ---
+	load-csv: func(path: string) -> result<dataframe>;
+	from-rows: func(columns: list<string>, rows: list<list<string>>) -> result<dataframe>;
+	filter: func(df: dataframe, filters: list<column-filter>) -> result<dataframe>;
+	group-by: func(df: dataframe, by-columns: list<string>) -> result<dataframe>;
+	aggregate: func(df: dataframe, aggs: list<aggregation>) -> result<dataframe>;
+	to-json: func(df: dataframe) -> result<string>;
 }
 
-// Update the world to import our new interface
 world imports {
   import dataframe-analysis;
 }

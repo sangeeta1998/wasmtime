@@ -1,43 +1,68 @@
 use anyhow::Result;
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 
 use wasmtime_wasi_dataframe::{WasiDataframe, WasiDataframeCtx, WasiDataframeCtxBuilder};
+use wasmtime_wasi_dataframe::bindings::wasi::accelerator::dataframe_analysis as wit_df;
+use wit_df::Host as _;
 
-// Bring the generated trait into scope so we can call the host methods.
-use wasmtime_wasi_dataframe::bindings::wasi::accelerator::dataframe_analysis::Host as _;
+fn build_ctx() -> WasiDataframeCtx { WasiDataframeCtxBuilder::new().build() }
+
+fn fixture_csv() -> String {
+	let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+	p.push("tests");
+	p.push("data");
+	p.push("sample.csv");
+	p.to_string_lossy().to_string()
+}
 
 #[test]
-fn dataframe_smoke() -> Result<()> {
-	// Create a small CSV in a temp dir
-	let mut dir = std::env::temp_dir();
-	dir.push("wasi_df_test");
-	std::fs::create_dir_all(&dir)?;
-	let mut csv_path = PathBuf::from(&dir);
-	csv_path.push("data.csv");
-	let mut f = File::create(&csv_path)?;
-	writeln!(f, "city,group,val")?;
-	writeln!(f, "A,x,10")?;
-	writeln!(f, "A,y,5")?;
-	writeln!(f, "B,x,7")?;
-	writeln!(f, "B,y,3")?;
-	f.flush()?;
-
-	// Build context and call host API directly
-	let mut ctx: WasiDataframeCtx = WasiDataframeCtxBuilder::new().build();
+fn load_and_json_preview() -> Result<()> {
+	let mut ctx = build_ctx();
 	let mut host = WasiDataframe::new(&mut ctx);
-
-	let df = host.load_csv(csv_path.to_string_lossy().to_string())?;
-	let df_filtered = host.filter(df, "val > 5".to_string())?;
-	let df_grouped = host.group_by(df_filtered, vec!["group".to_string()])?;
-	let df_agg = host.aggregate(df_grouped, vec!["mean(val)".to_string(), "count()".to_string()])?;
-	let json = host.to_json(df_agg)?;
-
-	// Basic assertions
+	let df = host.load_csv(fixture_csv())?;
+	let json = host.to_json(df)?;
 	assert!(json.starts_with("["));
-	assert!(json.contains("mean_val"));
-	assert!(json.contains("count"));
+	assert!(json.contains("city"));
+	Ok(())
+}
 
+#[test]
+fn filter_with_enums() -> Result<()> {
+	let mut ctx = build_ctx();
+	let mut host = WasiDataframe::new(&mut ctx);
+	let df = host.load_csv(fixture_csv())?;
+	let filters = vec![wit_df::ColumnFilter{ column: "val".to_string(), op: wit_df::Comparator::Gt(()), value: wit_df::Scalar::F64(5.0)}];
+	let df2 = host.filter(df, filters)?;
+	let json = host.to_json(df2)?;
+	assert!(json.contains("10") || json.contains("7"));
+	Ok(())
+}
+
+#[test]
+fn group_and_aggregate() -> Result<()> {
+	let mut ctx = build_ctx();
+	let mut host = WasiDataframe::new(&mut ctx);
+	let df = host.load_csv(fixture_csv())?;
+	let df_g = host.group_by(df, vec!["group".to_string()])?;
+	let df_a = host.aggregate(df_g, vec![wit_df::Aggregation::Count(()), wit_df::Aggregation::Mean("val".to_string())])?;
+	let json = host.to_json(df_a)?;
+	assert!(json.contains("count"));
+	assert!(json.contains("mean_val"));
+	Ok(())
+}
+
+#[test]
+fn from_rows_constructor() -> Result<()> {
+	let mut ctx = build_ctx();
+	let mut host = WasiDataframe::new(&mut ctx);
+	let cols = vec!["city".to_string(), "group".to_string(), "val".to_string()];
+	let rows = vec![
+		vec!["A".to_string(), "x".to_string(), "10".to_string()],
+		vec!["B".to_string(), "y".to_string(), "5".to_string()],
+	];
+	let df = host.from_rows(cols, rows)?;
+	let json = host.to_json(df)?;
+	assert!(json.contains("A"));
+	assert!(json.contains("B"));
 	Ok(())
 }

@@ -6,10 +6,11 @@
 //!
 //! Currently supported operations:
 //! - load-csv(path)
-//! - filter(df, predicate_string) [very small subset parser]
+//! - from-rows(columns, rows)
+//! - filter(df, filters)
 //! - group-by(df, by_columns)
-//! - aggregate(df, aggs) [supports mean(col) and count()]
-//! - to-json(df) [serializes a small preview for now]
+//! - aggregate(df, aggs) [mean(col), count()]
+//! - to-json(df)
 //
 
 #![deny(missing_docs)]
@@ -27,7 +28,6 @@ pub use self::generated as bindings;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use wasmtime::component::HasData;
-
 use polars::prelude::*;
 
 // Bring generated interface into scope.
@@ -106,18 +106,36 @@ impl wit_df::Host for WasiDataframe<'_> {
 		Ok(h)
 	}
 
-	fn filter(&mut self, df: wit_df::Dataframe, f: String) -> Result<wit_df::Dataframe> {
-		let lf = self
+	fn from_rows(&mut self, columns: Vec<String>, rows: Vec<Vec<String>>) -> Result<wit_df::Dataframe> {
+		if columns.is_empty() { return Err(anyhow!("columns must not be empty")); }
+		let width = columns.len();
+		for r in rows.iter() { if r.len() != width { return Err(anyhow!("row has wrong width")); } }
+		let mut series: Vec<Series> = Vec::with_capacity(width);
+		for (ci, name) in columns.iter().enumerate() {
+			let mut col_vals: Vec<String> = Vec::with_capacity(rows.len());
+			for r in rows.iter() { col_vals.push(r[ci].clone()); }
+			series.push(Series::new(name.as_str(), col_vals));
+		}
+		let df = DataFrame::new(series).map_err(|e| anyhow!("dataframe build failed: {e}"))?;
+		let lf = df.lazy();
+		let h = self.ctx.new_handle();
+		self.ctx.lazyframes.insert(h, lf);
+		Ok(h)
+	}
+
+	fn filter(&mut self, df: wit_df::Dataframe, filters: Vec<wit_df::ColumnFilter>) -> Result<wit_df::Dataframe> {
+		let mut lf = self
 			.ctx
 			.lazyframes
 			.get(&df)
 			.cloned()
 			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
-
-		let expr = parse_simple_predicate(&f)?;
-		let out = lf.filter(expr);
+		for f in filters.into_iter() {
+			let expr = filter_expr_from_wit(&f)?;
+			lf = lf.filter(expr);
+		}
 		let h = self.ctx.new_handle();
-		self.ctx.lazyframes.insert(h, out);
+		self.ctx.lazyframes.insert(h, lf);
 		Ok(h)
 	}
 
@@ -137,7 +155,7 @@ impl wit_df::Host for WasiDataframe<'_> {
 		Ok(h)
 	}
 
-	fn aggregate(&mut self, df: wit_df::Dataframe, aggs: Vec<String>) -> Result<wit_df::Dataframe> {
+	fn aggregate(&mut self, df: wit_df::Dataframe, aggs: Vec<wit_df::Aggregation>) -> Result<wit_df::Dataframe> {
 		let lf = self
 			.ctx
 			.lazyframes
@@ -147,16 +165,12 @@ impl wit_df::Host for WasiDataframe<'_> {
 
 		let mut agg_exprs: Vec<Expr> = Vec::new();
 		if aggs.is_empty() {
-			// Default to count if no aggregates provided.
 			agg_exprs.push(Expr::count().alias("count"));
 		} else {
-			for s in aggs.iter() {
-				if let Some(col) = s.strip_prefix("mean(").and_then(|t| t.strip_suffix(')')) {
-					agg_exprs.push(col(col).mean().alias(&format!("mean_{}", col)));
-				} else if s == "count()" {
-					agg_exprs.push(Expr::count().alias("count"));
-				} else {
-					return Err(anyhow!("unsupported aggregation: {s}"));
+			for a in aggs.into_iter() {
+				match a {
+					wit_df::Aggregation::Count(()) => agg_exprs.push(Expr::count().alias("count")),
+					wit_df::Aggregation::Mean(col) => agg_exprs.push(col::col(&col).mean().alias(&format!("mean_{}", col))),
 				}
 			}
 		}
@@ -175,11 +189,10 @@ impl wit_df::Host for WasiDataframe<'_> {
 			.ok_or_else(|| anyhow!("invalid dataframe handle"))?;
 
 		let df = lf
-			.limit(100) // keep output small
+			.limit(100)
 			.collect()
 			.map_err(|e| anyhow!("collect failed: {e}"))?;
 
-		// Serialize rows to a JSON array of objects (simple/naive implementation)
 		let columns = df.get_columns();
 		let col_names: Vec<&str> = columns.iter().map(|c| c.name().as_str()).collect();
 		let height = df.height();
@@ -203,6 +216,24 @@ impl wit_df::Host for WasiDataframe<'_> {
 	}
 }
 
+fn filter_expr_from_wit(f: &wit_df::ColumnFilter) -> Result<Expr> {
+	let lhs = col(&f.column);
+	let rhs = match &f.value {
+		wit_df::Scalar::F64(v) => lit(*v),
+		wit_df::Scalar::String(s) => lit(s.as_str()),
+		wit_df::Scalar::Bool(b) => lit(*b),
+	};
+	let e = match f.op {
+		wit_df::Comparator::Gt(()) => lhs.gt(rhs),
+		wit_df::Comparator::Gte(()) => lhs.gt_eq(rhs),
+		wit_df::Comparator::Lt(()) => lhs.lt(rhs),
+		wit_df::Comparator::Lte(()) => lhs.lt_eq(rhs),
+		wit_df::Comparator::Eq(()) => lhs.eq(rhs),
+		wit_df::Comparator::Neq(()) => lhs.neq(rhs),
+	};
+	Ok(e)
+}
+
 fn json_value_from_anyvalue(v: AnyValue) -> String {
 	match v {
 		AnyValue::Null => "null".to_string(),
@@ -224,28 +255,6 @@ fn json_value_from_anyvalue(v: AnyValue) -> String {
 
 fn escape_json_str(s: &str) -> String {
 	s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn parse_simple_predicate(s: &str) -> Result<Expr> {
-	// Very small subset parser: "col > number" or "col == number"
-	let parts: Vec<&str> = s.split_whitespace().collect();
-	if parts.len() != 3 { return Err(anyhow!("unsupported filter predicate: {s}")); }
-	let col_name = parts[0];
-	let op = parts[1];
-	let rhs_str = parts[2];
-	let rhs_num = rhs_str.parse::<f64>().map_err(|_| anyhow!("rhs must be number: {rhs_str}"))?;
-	let rhs = lit(rhs_num);
-	let c = col(col_name);
-	let expr = match op {
-		">" => c.gt(rhs),
-		">=" => c.gt_eq(rhs),
-		"<" => c.lt(rhs),
-		"<=" => c.lt_eq(rhs),
-		"==" => c.eq(rhs),
-		"!=" => c.neq(rhs),
-		_ => return Err(anyhow!("unsupported operator in predicate: {op}")),
-	};
-	Ok(expr)
 }
 
 struct HasWasiDataframe;
