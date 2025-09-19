@@ -26,6 +26,8 @@ use wasmtime_wasi_http::{
 use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
 #[cfg(feature = "wasi-accelerator")]
 use wasmtime_wasi_accelerator::{WasiAccelerator, WasiAcceleratorCtx, WasiAcceleratorCtxBuilder};
+#[cfg(feature = "wasi-dataframe")]
+use wasmtime_wasi_dataframe::{WasiDataframe, WasiDataframeCtx, WasiDataframeCtxBuilder};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::wit::WasiNnView;
@@ -967,6 +969,33 @@ impl RunCommand {
             }
         }
 
+        if self.run.common.wasi.dataframe == Some(true) {
+            #[cfg(not(feature = "wasi-dataframe"))]
+            {
+                bail!(
+                    "Cannot enable wasi-dataframe when the binary is not compiled with this feature."
+                );
+            }
+            #[cfg(all(feature = "wasi-dataframe", feature = "component-model"))]
+            {
+                match linker {
+                    CliLinker::Core(_) => {
+                        bail!("Cannot enable wasi-dataframe for core wasm modules");
+                    }
+                    CliLinker::Component(linker) => {
+                        let ctx = WasiDataframeCtxBuilder::new().build();
+
+                        wasmtime_wasi_dataframe::add_to_linker(linker, |h| {
+                            WasiDataframe::new(
+                                Arc::get_mut(h.wasi_dataframe.as_mut().unwrap()).unwrap(),
+                            )
+                        })?;
+                        store.data_mut().wasi_dataframe = Some(Arc::new(ctx));
+                    }
+                }
+            }
+        }
+
         if self.run.common.wasi.threads == Some(true) {
             #[cfg(not(feature = "wasi-threads"))]
             {
@@ -1182,6 +1211,8 @@ struct Host {
     wasi_tls: Option<Arc<WasiTlsCtx>>,
     #[cfg(feature = "wasi-accelerator")]
     wasi_accelerator: Option<Arc<WasiAcceleratorCtx>>,
+    #[cfg(feature = "wasi-dataframe")]
+    wasi_dataframe: Option<Arc<WasiDataframeCtx>>,
 }
 
 impl Host {

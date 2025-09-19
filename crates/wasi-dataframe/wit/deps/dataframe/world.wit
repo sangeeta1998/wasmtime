@@ -1,4 +1,4 @@
-package wasi:accelerator@0.2.0-draft; // Keep the package name for now
+package wasi:dataframe@0.2.0-draft;
 
 interface dataframe-analysis {
 	// Opaque handle to a dataframe/lazyframe on the host
@@ -8,10 +8,10 @@ interface dataframe-analysis {
 	enum comparator { gt, gte, lt, lte, eq, neq }
 
 	// Simple scalar values used in filters
-	union scalar {
-		f64,
-		string,
-		bool,
+	variant scalar {
+		logic(bool),
+		name(string),
+		value(f64),
 	}
 
 	record column-filter {
@@ -23,7 +23,7 @@ interface dataframe-analysis {
 	// Aggregation functions
 	enum aggregation {
 		count,
-		mean(string),
+		mean,
 	}
 
 	// --- The API ---

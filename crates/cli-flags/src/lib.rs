@@ -439,6 +439,8 @@ wasmtime_option_group! {
         pub keyvalue: Option<bool>,
         /// Enable support for WASI accelerator imports (experimental)
         pub accelerator: Option<bool>,
+        /// Enable support for WASI dataframe imports (experimental)
+        pub dataframe: Option<bool>,
         /// Inherit environment variables and file descriptors following the
         /// systemd listen fd specification (UNIX only) (legacy wasip1
         /// implementation only)

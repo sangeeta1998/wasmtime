@@ -2086,6 +2086,16 @@ start a print 1234
     }
 
     #[test]
+    fn cli_dataframe() -> Result<()> {
+        run_wasmtime(&[
+            "run",
+            "-Sdataframe",
+            DATAFRAME_MAIN_COMPONENT,
+        ])?;
+        Ok(())
+    }
+
+    #[test]
     fn cli_multiple_preopens() -> Result<()> {
         run_wasmtime(&[
             "run",

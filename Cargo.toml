@@ -57,6 +57,7 @@ wasmtime-wasi-config = { workspace = true, optional = true }
 wasmtime-wasi-tls = { workspace = true, optional = true }
 wasmtime-wasi-keyvalue = { workspace = true, optional = true }
 wasmtime-wasi-accelerator = { workspace = true, optional = true }
+wasmtime-wasi-dataframe = { workspace = true, optional = true }
 wasmtime-wasi-threads = { workspace = true, optional = true }
 wasmtime-wasi-http = { workspace = true, optional = true }
 wasmtime-unwinder = { workspace = true }
@@ -239,6 +240,7 @@ wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "37.0.0" }
 wasmtime-wasi-config = { path = "crates/wasi-config", version = "37.0.0" }
 wasmtime-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "37.0.0" }
 wasmtime-wasi-accelerator = { path = "crates/wasi-accelerator", version = "37.0.0" }
+wasmtime-wasi-dataframe = { path = "crates/wasi-dataframe", version = "37.0.0" }
 wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "37.0.0" }
 wasmtime-wasi-tls = { path = "crates/wasi-tls", version = "37.0.0" }
 wasmtime-wasi-tls-nativetls = { path = "crates/wasi-tls-nativetls", version = "37.0.0" }
@@ -450,6 +452,7 @@ default = [
   "wasi-config",
   "wasi-keyvalue",
   "wasi-accelerator",
+  "wasi-dataframe",
   "wasi-tls",
 
   # Most features of Wasmtime are enabled by default.
@@ -512,6 +515,7 @@ wasi-http = ["component-model", "dep:wasmtime-wasi-http", "dep:tokio", "dep:hype
 wasi-config = ["dep:wasmtime-wasi-config"]
 wasi-keyvalue = ["dep:wasmtime-wasi-keyvalue"]
 wasi-accelerator = ["dep:wasmtime-wasi-accelerator"]
+wasi-dataframe = ["dep:wasmtime-wasi-dataframe"]
 pooling-allocator = ["wasmtime/pooling-allocator", "wasmtime-cli-flags/pooling-allocator"]
 component-model = [
   "wasmtime/component-model",

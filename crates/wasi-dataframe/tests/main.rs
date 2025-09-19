@@ -1,68 +1,69 @@
-use anyhow::Result;
-use std::path::PathBuf;
+use anyhow::{Result, anyhow};
+use test_programs_artifacts::{DATAFRAME_MAIN_COMPONENT, foreach_accelerator};
+use wasmtime::{
+    Store,
+    component::{Component, Linker, ResourceTable},
+};
 
+use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView, p2::bindings::Command};
 use wasmtime_wasi_dataframe::{WasiDataframe, WasiDataframeCtx, WasiDataframeCtxBuilder};
-use wasmtime_wasi_dataframe::bindings::wasi::accelerator::dataframe_analysis as wit_df;
-use wit_df::Host as _;
 
-fn build_ctx() -> WasiDataframeCtx { WasiDataframeCtxBuilder::new().build() }
-
-fn fixture_csv() -> String {
-	let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-	p.push("tests");
-	p.push("data");
-	p.push("sample.csv");
-	p.to_string_lossy().to_string()
+struct Ctx {
+    table: ResourceTable,
+    wasi_ctx: WasiCtx,
+    wasi_dataframe_ctx: WasiDataframeCtx,
 }
 
-#[test]
-fn load_and_json_preview() -> Result<()> {
-	let mut ctx = build_ctx();
-	let mut host = WasiDataframe::new(&mut ctx);
-	let df = host.load_csv(fixture_csv())?;
-	let json = host.to_json(df)?;
-	assert!(json.starts_with("["));
-	assert!(json.contains("city"));
-	Ok(())
+impl WasiView for Ctx {
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: &mut self.wasi_ctx,
+            table: &mut self.table,
+        }
+    }
 }
 
-#[test]
-fn filter_with_enums() -> Result<()> {
-	let mut ctx = build_ctx();
-	let mut host = WasiDataframe::new(&mut ctx);
-	let df = host.load_csv(fixture_csv())?;
-	let filters = vec![wit_df::ColumnFilter{ column: "val".to_string(), op: wit_df::Comparator::Gt(()), value: wit_df::Scalar::F64(5.0)}];
-	let df2 = host.filter(df, filters)?;
-	let json = host.to_json(df2)?;
-	assert!(json.contains("10") || json.contains("7"));
-	Ok(())
+
+async fn run_wasi(path: &str, ctx: Ctx) -> Result<()> {
+    let engine = test_programs_artifacts::engine(|config| {
+        config.async_support(true);
+    });
+    let mut store = Store::new(&engine, ctx);
+    let component = Component::from_file(&engine, path)?;
+
+    let mut linker = Linker::new(&engine);
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi_dataframe::add_to_linker(&mut linker, |h: &mut Ctx| {
+        WasiDataframe::new(& mut h.wasi_dataframe_ctx)
+    })?;
+
+    let command = Command::instantiate_async(&mut store, &component, &linker).await?;
+    command
+        .wasi_cli_run()
+        .call_run(&mut store)
+        .await?
+        .map_err(|()| anyhow!("command returned with failing exit status"))
 }
 
-#[test]
-fn group_and_aggregate() -> Result<()> {
-	let mut ctx = build_ctx();
-	let mut host = WasiDataframe::new(&mut ctx);
-	let df = host.load_csv(fixture_csv())?;
-	let df_g = host.group_by(df, vec!["group".to_string()])?;
-	let df_a = host.aggregate(df_g, vec![wit_df::Aggregation::Count(()), wit_df::Aggregation::Mean("val".to_string())])?;
-	let json = host.to_json(df_a)?;
-	assert!(json.contains("count"));
-	assert!(json.contains("mean_val"));
-	Ok(())
+macro_rules! assert_test_exists {
+    ($name:ident) => {
+        #[expect(unused_imports, reason = "just here to assert it exists")]
+        use self::$name as _;
+    };
 }
 
-#[test]
-fn from_rows_constructor() -> Result<()> {
-	let mut ctx = build_ctx();
-	let mut host = WasiDataframe::new(&mut ctx);
-	let cols = vec!["city".to_string(), "group".to_string(), "val".to_string()];
-	let rows = vec![
-		vec!["A".to_string(), "x".to_string(), "10".to_string()],
-		vec!["B".to_string(), "y".to_string(), "5".to_string()],
-	];
-	let df = host.from_rows(cols, rows)?;
-	let json = host.to_json(df)?;
-	assert!(json.contains("A"));
-	assert!(json.contains("B"));
-	Ok(())
+foreach_accelerator!(assert_test_exists);
+
+#[tokio::test(flavor = "multi_thread")]
+async fn dataframe_main() -> Result<()> {
+    run_wasi(
+        DATAFRAME_MAIN_COMPONENT,
+        Ctx {         
+            table: ResourceTable::new(),   
+            wasi_ctx: WasiCtx::builder().inherit_stderr().build(),
+            wasi_dataframe_ctx: WasiDataframeCtxBuilder::new()
+                .build(),
+        },
+    )
+    .await
 }

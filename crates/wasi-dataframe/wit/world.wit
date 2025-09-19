@@ -1,6 +1,6 @@
 // We actually don't use this; it's just to let bindgen! find the corresponding world in wit/deps.
-package wasmtime:wasi-accelerator;
+package wasmtime:wasi-dataframe;
 
 world bindings {
-  include wasi:accelerator/imports@0.2.0-draft;
+  include wasi:dataframe/imports@0.2.0-draft;
 }

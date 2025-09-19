@@ -31,6 +31,8 @@ use wasmtime_wasi_http::{
 
 #[cfg(feature = "wasi-accelerator")]
 use wasmtime_wasi_accelerator::{WasiAccelerator, WasiAcceleratorCtx, WasiAcceleratorCtxBuilder};
+#[cfg(feature = "wasi-dataframe")]
+use wasmtime_wasi_dataframe::{WasiDataframe, WasiDataframeCtx, WasiDataframeCtxBuilder};
 #[cfg(feature = "wasi-config")]
 use wasmtime_wasi_config::{WasiConfig, WasiConfigVariables};
 #[cfg(feature = "wasi-keyvalue")]
@@ -58,6 +60,9 @@ struct Host {
 
     #[cfg(feature = "wasi-accelerator")]
     wasi_accelerator: Option<WasiAcceleratorCtx>,
+
+    #[cfg(feature = "wasi-dataframe")]
+    wasi_dataframe: Option<WasiDataframeCtx>,
 
     #[cfg(feature = "profiling")]
     guest_profiler: Option<Arc<wasmtime::GuestProfiler>>,
@@ -254,6 +259,13 @@ impl ServeCommand {
                 host.wasi_accelerator.replace(ctx);
             }
         }
+        if self.run.common.wasi.dataframe == Some(true) {
+            #[cfg(feature = "wasi-dataframe")]
+            {
+                let ctx = WasiDataframeCtxBuilder::new().build();
+                host.wasi_dataframe.replace(ctx);
+            }
+        }
 
         let mut store = Store::new(engine, host);
 
@@ -337,6 +349,19 @@ impl ServeCommand {
             {
                 wasmtime_wasi_accelerator::add_to_linker(linker, |h: &mut Host| {
                     WasiAccelerator::new(h.wasi_accelerator.as_mut().unwrap())
+                })?;
+            }
+        }
+
+        if self.run.common.wasi.dataframe == Some(true) {
+            #[cfg(not(feature = "wasi-dataframe"))]
+            {
+                bail!("support for wasi-dataframe was disabled at compile time");
+            }
+            #[cfg(feature = "wasi-dataframe")]
+            {
+                wasmtime_wasi_dataframe::add_to_linker(linker, |h: &mut Host| {
+                    WasiDataframe::new(h.wasi_dataframe.as_mut().unwrap())
                 })?;
             }
         }
