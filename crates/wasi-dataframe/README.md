@@ -49,4 +49,12 @@ Collects with a `.limit(100)` preview and serializes rows to a JSON array.
 
 The main test driver is in `crates/dataframe/tests/main.rs`, but the real test case is in `crates/test-programs/src/bin/dataframe_main.rs` where we should add code as if writing a WebAssembly module.
 
+```bash
+cargo check --package wasmtime-wasi-dataframe
+
+cargo check --bin dataframe_main --package test-programs
+
+cargo test --package wasmtime-wasi-dataframe  # (no tests run, but compiles)
+
+
 **Note**: The test currently has a runtime conflict issue that needs to be resolved separately.
