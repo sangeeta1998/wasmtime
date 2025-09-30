@@ -47,29 +47,16 @@ async fn run_wasi(path: &str, ctx: Ctx) -> Result<()> {
 
 // Note: dataframe_main test is defined below
 
-// TODO: Fix runtime conflict issue - test disabled temporarily
-// The test has a tokio runtime conflict that needs to be resolved separately
-// #[tokio::test(flavor = "current_thread")]
-// async fn dataframe_main() -> Result<()> {
-//     // Create a temporary CSV file for the test
-//     let csv_content = "city,group,val\nA,x,10\nA,y,5\nB,x,7\nB,y,3\n";
-//     let temp_dir = std::env::temp_dir();
-//     let csv_path = temp_dir.join("sample.csv");
-//     std::fs::write(&csv_path, csv_content)?;
-//     
-//     // Set up the WASI context with the temp directory
-//     let wasi_ctx = WasiCtx::builder()
-//         .inherit_stderr()
-//         .preopened_dir(temp_dir, "/tmp", wasmtime_wasi::DirPerms::all(), wasmtime_wasi::FilePerms::all())?
-//         .build();
-//     
-//     run_wasi(
-//         DATAFRAME_MAIN_COMPONENT,
-//         Ctx {         
-//             table: ResourceTable::new(),   
-//             wasi_ctx,
-//             wasi_dataframe_ctx: WasiDataframeCtxBuilder::new()
-//                 .build(),
-//         },
-//     ).await
-// }
+#[tokio::test(flavor = "multi_thread")]
+async fn dataframe_main() -> Result<()> {
+    run_wasi(
+        DATAFRAME_MAIN_COMPONENT,
+        Ctx {         
+            table: ResourceTable::new(),   
+            wasi_ctx: WasiCtx::builder().inherit_stderr().build(),
+            wasi_dataframe_ctx: WasiDataframeCtxBuilder::new()
+                .build(),
+        },
+    )
+    .await
+}
