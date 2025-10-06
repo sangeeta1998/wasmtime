@@ -51,7 +51,7 @@ The main test driver is in `crates/wasi-dataframe/tests/main.rs`, but the real t
 
 ### Current Test Status
 
-✅ **Working Tests:**
+ **Working Tests:**
 - `from_rows()` - Create dataframe from programmatic data
 - `to_json()` - Convert dataframe to JSON format
 
@@ -74,20 +74,10 @@ cargo test --package wasmtime-wasi-dataframe
 # test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
-### Test Coverage
-
-| Function | Status | Tested | Notes |
-|----------|--------|--------|-------|
-| `from_rows()` | ✅ Working | ✅ Tested | Creates dataframe from programmatic data |
-| `to_json()` | ✅ Working | ✅ Tested | Converts dataframe to JSON format |
-| `filter()` | 🧪 Implemented | ❌ Needs integration | Filtering with conditions - implemented in host code |
-| `group_by()` | 🧪 Implemented | ❌ Needs integration | Grouping operations - implemented in host code |
-| `aggregate()` | 🧪 Implemented | ❌ Needs integration | Aggregation functions - implemented in host code |
-| `load_csv()` | 🧪 Implemented | ❌ Needs integration | CSV file loading - implemented in host code |
 
 ### Advanced Operations Implementation
 
-All advanced operations are fully implemented in the host code (`src/lib.rs`):
+All advanced operations are implemented in the host code (`src/lib.rs`):
 
 - **Filter Operations**: Complete implementation with support for various comparators
 - **Group By Operations**: Complete implementation using Polars group_by
