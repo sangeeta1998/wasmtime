@@ -54,23 +54,33 @@ fn main() {
         std::process::exit(1);
     }
     
-    // Test 2: Aggregation::Count over the whole dataframe
-    println!("\nTest 2: Aggregation::Count over all rows...");
+    // Test 2: Filter (val > 5) via interface, then Aggregation::Count
+    println!("\nTest 2: Interface filter(val > 5) then Aggregation::Count...");
     {
-        use test_programs::wasi::dataframe::dataframe_analysis::{aggregate, Aggregation};
-        // Recreate the dataframe for a fresh handle
+        use test_programs::wasi::dataframe::dataframe_analysis::{
+            filter, aggregate, ColumnFilter, Comparator, Scalar, Aggregation
+        };
+        // Fresh dataframe
         let df2 = match from_rows(&columns, &rows) {
             Ok(df) => df,
             Err(e) => {
-                println!("❌ Failed to create dataframe for aggregation: {:?}", e);
+                println!("❌ Failed to create dataframe for filter+agg: {:?}", e);
+                std::process::exit(1);
+            }
+        };
+        let filters = vec![ColumnFilter { column: "val".to_string(), op: Comparator::Gt, value: Scalar::Value(5.0) }];
+        let df_filtered = match filter(df2, &filters) {
+            Ok(df) => df,
+            Err(()) => {
+                println!("❌ filter(val > 5) returned error");
                 std::process::exit(1);
             }
         };
         let aggs = vec![Aggregation::Count];
-        let agg_df = match aggregate(df2, &aggs) {
+        let agg_df = match aggregate(df_filtered, &aggs) {
             Ok(df) => df,
             Err(()) => {
-                println!("❌ aggregate(count) returned error");
+                println!("❌ aggregate(count) after filter returned error");
                 std::process::exit(1);
             }
         };
@@ -81,12 +91,12 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        println!("Aggregation result JSON: {}", agg_json);
+        println!("Filter+Aggregation result JSON: {}", agg_json);
         if !agg_json.contains("count") {
             println!("❌ Aggregation output missing 'count' field");
             std::process::exit(1);
         }
-        println!("✅ Aggregation::Count test passed");
+        println!("✅ Interface filter + Aggregation::Count test passed");
     }
     
     println!("🎉 Basic test completed successfully!");

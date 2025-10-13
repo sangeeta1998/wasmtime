@@ -116,3 +116,15 @@ To enable testing of advanced operations:
 3. **Testing Strategy**: Focus on the working basic operations while the advanced operations integration is being resolved
 
 **Current Working Operations**: `from_rows()` and `to_json()` are functional and tested.
+
+**Current Status**
+
+In the interface layer, numeric filters now cast the target column to Float64 when Scalar::Value(f64) is used. This fixes the prior mismatch where from_rows produced Utf8 columns and filter(val > 5) compared numeric against strings.
+
+Kept the interface fix: numeric filters cast the target column to Float64.
+Added missing imports (Series, DataFrame, NamedFrom, IntoLazy) to resolve Polars APIs. The interface filter(val > 5) + aggregate(count) path now works because of the cast in filter_expr_from_wit.
+
+Result:
+```bash
+cargo test -p wasmtime-wasi-dataframe --test main -- --nocapture 
+```

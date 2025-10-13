@@ -28,10 +28,12 @@ pub mod generated {
 pub use self::generated as bindings;
 
 use anyhow::Result;
-use polars::prelude::*;
 use std::collections::HashMap;
+use polars::prelude::{LazyFrame, LazyCsvReader, LazyFileListReader, Expr, col, lit, DataType, NamedFrom, IntoLazy};
+use polars::series::Series;
+use polars::frame::DataFrame;
+use polars::datatypes::AnyValue;
 use wasmtime::component::HasData;
-
 // Bring generated interface into scope.
 use self::generated::wasi::dataframe::dataframe_analysis as wit_df;
 
@@ -254,11 +256,12 @@ impl wit_df::Host for WasiDataframe<'_> {
 }
 
 fn filter_expr_from_wit(f: &wit_df::ColumnFilter) -> std::result::Result<Expr, ()> {
-    let lhs = col(&f.column);
-    let rhs = match &f.value {
-        wit_df::Scalar::Logic(b) => lit(*b),
-        wit_df::Scalar::Name(s) => lit(s.as_str()),
-        wit_df::Scalar::Value(v) => lit(*v),
+    // When comparing against a numeric value, cast column to Float64 so
+    // filters work even if data came from from-rows as Utf8 strings.
+    let (lhs, rhs) = match &f.value {
+        wit_df::Scalar::Value(v) => (col(&f.column).cast(DataType::Float64), lit(*v)),
+        wit_df::Scalar::Name(s) => (col(&f.column), lit(s.as_str())),
+        wit_df::Scalar::Logic(b) => (col(&f.column), lit(*b)),
     };
     let e = match f.op {
         wit_df::Comparator::Gt => lhs.gt(rhs),
