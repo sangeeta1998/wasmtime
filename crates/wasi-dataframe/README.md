@@ -2,6 +2,11 @@
 
 This crate provides a Wasmtime host implementation of a proposed `dataframe-analysis` interface under the `wasi:accelerator` package. It exposes a subset of Polars operations to guest components.
 
+Core Components:
+WIT Interface: Defines the WebAssembly interface using WIT (WebAssembly Interface Types)
+Host Implementation: Rust implementation using Polars for data processing
+Test Framework: Integration tests with WebAssembly components
+
 ## Current Status
 
  **Compilation**: Compilation errors have been resolved, and the code compiles successfully.
@@ -110,4 +115,4 @@ To enable testing of advanced operations:
 2. **Function Availability**: Some advanced functions may not be available in the current test environment bindings
 3. **Testing Strategy**: Focus on the working basic operations while the advanced operations integration is being resolved
 
-**Current Working Operations**: `from_rows()` and `to_json()` are fully functional and tested.
+**Current Working Operations**: `from_rows()` and `to_json()` are functional and tested.
